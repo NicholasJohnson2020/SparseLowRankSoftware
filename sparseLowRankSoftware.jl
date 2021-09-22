@@ -1,5 +1,5 @@
 using LinearAlgebra, JuMP, Mosek, MosekTools, SCS, LowRankApprox, Random, Dates
 using Distributions, StatsBase
 
-include("BnB.jl")
-include("SPCP.jl")
+include("src/BnB.jl")
+include("src/SPCP.jl")
