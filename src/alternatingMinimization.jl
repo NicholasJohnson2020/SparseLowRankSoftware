@@ -74,12 +74,8 @@ function project_matrix(A, k_rank; exact_svd=true)
 
     else
 
-        factors = rsvd(A, k_rank)
-        U = factors.U
-        S = factors.S
-        Vt = factors.Vt
-
-        projected_matrix = U * Diagonal(S) * Vt
+        projected_matrix = pqrfact(A, rank=k_rank)
+        projected_matrix = Matrix(projected_matrix)
 
     end
 
@@ -339,7 +335,7 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank; zero_indices=[],
 
 end;
 
-function validate_AM_params(n, param_frac, sigma, signal_to_noise;
+function validate_AM_params(n, param_frac, sigma; signal_to_noise=10,
                             exact_svd=true, train_size=20,
                             candidate_lambdas=[10, 1, 0.1, 0.01],
                             candidate_mus=[10, 1, 0.1, 0.01],

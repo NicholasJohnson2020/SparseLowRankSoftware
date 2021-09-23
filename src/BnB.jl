@@ -97,16 +97,7 @@ function SLR_BnB(U, mu, lambda, k_sparse, k_rank; epsilon=0.1,
              objective value (Float64) achieved by the returned feasible
              solution.
     """
-
-    return (global_X_sol, global_Y_sol),
-           global_upper_bound,
-           global_lower_bound,
-           num_explored_nodes,
-           upper_bound_hist,
-           lower_bound_hist,
-           total_time,
-           terminal_nodes
-
+    
     start_time = now()
 
     # Solve the root node
