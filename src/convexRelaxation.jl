@@ -28,6 +28,7 @@ function solve_perspective_relaxation(U, mu, lambda, k_sparse, k_rank;
              matrix Theta). The second value is the optimal objective value of
              the relaxation (Float64).
     """
+    
     n = size(U)[1]
 
     num_zeros = size(zero_indices)[1]

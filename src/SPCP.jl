@@ -1,16 +1,28 @@
 function stable_principal_component_pursuit(M, sigma;
-    threshold = 1e-6, solver_output=0, use_mosek=false)
+    threshold = 1e-6, solver_output=0)
+    """
+    This function solves the stable principal component pursuit problem.
 
+    :param M: An arbitrary n-by-n matrix.
+    :param sigma: A parameter that controls the tradeoff between nuclear norm
+                  term and the L1 norm term in the objective function
+    :param threshold: Singular values in the output low rank matrix below
+                      threshold are set to 0. Entries in the output sparse
+                      matrix below threshold are set to 0 (Float64).
+    :param solver_output: Solver_output param to be passed to SCS (Int64).
+
+    :return: This function returns two values. The first value is a tuple of 2
+             n-by-n arrays that correspond to the solution of stable PCP (the
+             first element in the tuple is the matrix X and the second element
+             is the matrix Y). The second value is the optimal objective value
+             of the optimization problem (Float64).
+    """
     n = size(M)[1]
-    mu = (2*n)^0.5 * sigma
+    mu = (2 * n) ^ 0.5 * sigma
 
-    if use_mosek
-        m = Model(Mosek.Optimizer)
-        set_optimizer_attribute(m, "MSK_IPAR_LOG", solver_output)
-    else
-        m = Model(SCS.Optimizer)
-        set_optimizer_attribute(m, "verbose", solver_output)
-    end
+    # Build stable PCP formulation using JuMP
+    m = Model(SCS.Optimizer)
+    set_optimizer_attribute(m, "verbose", solver_output)
 
     @variable(m, L[i=1:n, j=1:n])
     @variable(m, W_1[i=1:n, j=1:n])
@@ -30,6 +42,7 @@ function stable_principal_component_pursuit(M, sigma;
         n^(-0.5) * sum(S_abs[i, j] for i=1:n, j=1:n) +
         sum(error[i, j] for i=1:n, j=1:n)/(2*mu))
 
+    # Solve stable PCP
     optimize!(m)
 
     L_opt = value.(L)
