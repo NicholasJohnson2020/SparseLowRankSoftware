@@ -3,7 +3,7 @@ include("generateSyntheticData.jl")
 function compute_objective_value(X, Y, U, mu, lambda)
     """
     This function computes the objective value of the optimization problem
-    for the solution (X, Y). The objective value is given by:
+    for the solution given by (X, Y). The objective value is given by:
         ||U - X - Y||_F^2 + lambda * ||X||_F^2 + mu * ||Y||_F^2
 
     :param X: An n-by-n matrix.
@@ -33,7 +33,7 @@ function is_feasible(X, Y, k_sparse, k_rank; epsilon = 1e-10)
     :paeam k_sparse: The maximum number of non-zeros elements in Y (Int64).
     :param k_rank: The maximum rank of the X (Int64).
 
-    :return: True if the constraints are satisfied, false otherwise (bool).
+    :return: True if the constraints are satisfied, false otherwise (Bool).
     """
     # Verify the sparsity constraint
     num_nonzero = count(abs.(Y) .> epsilon)
@@ -51,8 +51,6 @@ function is_feasible(X, Y, k_sparse, k_rank; epsilon = 1e-10)
 
 end;
 
-# Worth investigating speeding up projection by avoiding computation of the
-# entire SVD of A.
 function project_matrix(A, k_rank; exact_svd=true)
     """
     This function projects the matrix A onto its first k_rank principal
@@ -60,20 +58,28 @@ function project_matrix(A, k_rank; exact_svd=true)
 
     :param A: An arbitrary n-by-n matrix.
     :param k_rank: The desired rank of the projection (Int64).
+    :param exact_svd: If true, compute an exact truncated SVD. If false,
+                      approximate the SVD using a randomized algorithm (Bool).
 
     :return: The n-by-n low rank projection of A.
     """
     if exact_svd
-        factors = svd(A)
+
+        factors = tsvd(A, k_rank)
+        U = factors[1]
+        S = factors[2]
+        V = factors[3]
+
+        projected_matrix = U * Diagonal(S) * V'
+
+    else
+
+        factors = rsvd(A, k_rank)
         U = factors.U
         S = factors.S
         Vt = factors.Vt
 
-        projected_matrix = U[:, 1:k_rank]*Diagonal(S[1:k_rank])*Vt[1:k_rank, :]
-
-    else
-        projected_matrix = pqrfact(A, rank=k_rank)
-        projected_matrix = Matrix(projected_matrix)
+        projected_matrix = U * Diagonal(S) * Vt
 
     end
 
@@ -81,16 +87,20 @@ function project_matrix(A, k_rank; exact_svd=true)
 
 end;
 
-# TODO: edit function description to describe zero_indices and one_indices params
-function construct_binary_matrix(A, k_sparse;
-    zero_indices=[], one_indices=[])
+function construct_binary_matrix(A, k_sparse; zero_indices=[], one_indices=[])
     """
-    This function constructs a binary matrix S of the same shape as A that where
+    This function constructs a binary matrix S of the same shape as A where
     S_ij = 1 if and only if A_ij is one of the k_sparse largest entries of A in
     absolute value.
 
     :param A: An arbitrary n-by-n matrix.
     :param k_sparse: The desired sparsity of the output matrix (Int64).
+    :param zero_indices: List of 2-tuples of Int64 where each entry consists of
+                         an index (i, j) such that S_ij is constrained to take
+                         value 0.
+    :param one_indices: List of 2-tuples of Int64 where each entry consists of
+                        an index (i, j) such that S_ij is constrained to take
+                        value 1.
 
     :return: An n-by-n binary matrix.
     """
@@ -99,6 +109,7 @@ function construct_binary_matrix(A, k_sparse;
     num_zeros = size(zero_indices)[1]
     num_ones = size(one_indices)[1]
 
+    # Verify that zero_indices and one_indices have a valid length
     @assert num_ones <= k_sparse
     @assert num_zeros <= n * n - k_sparse
 
@@ -128,7 +139,6 @@ function construct_binary_matrix(A, k_sparse;
 
 end;
 
-# TODO: edit function description to describe zero_indices and one_indices params
 function solve_sparse_problem(U_tilde, mu, k_sparse;
     zero_indices=[], one_indices=[])
     """
@@ -140,6 +150,13 @@ function solve_sparse_problem(U_tilde, mu, k_sparse;
     :param mu: The regularization parameter for the sparse matrix penalty
                (Float64).
     :param k_sparse: The maximum sparsity of the sparse matrix (Int64).
+    :param zero_indices: List of 2-tuples of Int64 where each entry consists of
+                         an index (i, j) such that Y_ij is constrained to take
+                         value 0.
+    :param one_indices: List of 2-tuples of Int64 where each entry consists of
+                        an index (i, j) such that S_ij is constrained to take
+                        value 1 where S is the binary matrix denoting the
+                        sparsity pattern of Y.
 
     :return: The n-by-n sparse matrix that solves the problem.
     """
@@ -154,7 +171,7 @@ end;
 
 function solve_rank_problem(U_tilde, lambda, k_rank; exact_svd=true)
     """
-    This function exactly solves the problem of approximating (in squared
+    This function solves the problem of approximating (in squared
     frobenius norm) an arbitrary matrix U_tilde by a low rank matrix and under
     a regularization penalty.
 
@@ -162,6 +179,8 @@ function solve_rank_problem(U_tilde, lambda, k_rank; exact_svd=true)
     :param lambda: The regularization parameter for the low rank matrix penalty
                    (Float64).
     :param k_rank: The maximum rank of the low rank matrix (Int64).
+    :param exact_svd: If true, compute an exact truncated SVD. If false,
+                      approximate the SVD using a randomized algorithm (Bool).
 
     :return: The n-by-n low rank matrix that solves the problem.
     """
@@ -169,7 +188,6 @@ function solve_rank_problem(U_tilde, lambda, k_rank; exact_svd=true)
 
 end;
 
-# TODO: edit function description to describe zero_indices and one_indices params
 function iterate_X_Y(U, mu, lambda, k_sparse, k_rank, X_init, Y_init;
     zero_indices = [], one_indices = [], min_improvement=0.001, exact_svd=true)
     """
@@ -189,9 +207,18 @@ function iterate_X_Y(U, mu, lambda, k_sparse, k_rank, X_init, Y_init;
     :param k_rank: The maximum rank of the low rank matrix (Int64).
     :param X_init: An n-by-n matrix with rank at most k_rank.
     :param Y_init: An n-by-n matrix with sparsity at most k_sparse.
+    :param zero_indices: List of 2-tuples of Int64 where each entry consists of
+                         an index (i, j) such that Y_ij is constrained to take
+                         value 0.
+    :param one_indices: List of 2-tuples of Int64 where each entry consists of
+                        an index (i, j) such that S_ij is constrained to take
+                        value 1 where S is the binary matrix denoting the
+                        sparsity pattern of Y.
     :param min_improvement: The minimal fractional decrease in the objective
                             value required for the procedure to continue
                             iterating.
+    :param exact_svd: If true, compute exact SVDs. If false, compute
+                      approximate SVDs (Bool).
 
     :return: This function returns three values. The first value is a tuple of
              two n-by-n arrays that correspond to the feasible solution found
@@ -229,9 +256,8 @@ function iterate_X_Y(U, mu, lambda, k_sparse, k_rank, X_init, Y_init;
 end;
 
 # TODO: edit function description to describe zero_indices and one_indices params
-function SLR_AM(U, mu, lambda, k_sparse, k_rank;
-    zero_indices=[], one_indices=[], random_restarts=100,
-    min_improvement=0.001, local_search_flag=false, exact_svd=true)
+function SLR_AM(U, mu, lambda, k_sparse, k_rank; zero_indices=[],
+    one_indices=[], random_restarts=100, min_improvement=0.001, exact_svd=true)
     """
     This function computes a feasible solution to the problem
         min ||U - X - Y||_F^2 + lambda * ||X||_F^2 + mu * ||Y||_F^2
@@ -248,17 +274,21 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank;
                    (Float64).
     :param k_sparse: The maximum sparsity of the sparse matrix (Int64).
     :param k_rank: The maximum rank of the low rank matrix (Int64).
+    :param zero_indices: List of 2-tuples of Int64 where each entry consists of
+                         an index (i, j) such that Y_ij is constrained to take
+                         value 0.
+    :param one_indices: List of 2-tuples of Int64 where each entry consists of
+                        an index (i, j) such that S_ij is constrained to take
+                        value 1 where S is the binary matrix denoting the
+                        sparsity pattern of Y.
     :param random_restarts: The number of times to repeat the optimizization
                             process from a random initial feasible solution
                             (Int64).
     :param min_improvement: The minimal fractional decrease in the objective
                             value required for the minimization procedure to
                             continue iterating.
-    :param local_search_flag: If true, after iteratively solving the sparse
-                              and low rank subproblems converges, the local
-                              search method is executed on the solution. If
-                              false, the local search method is never executed
-                              (bool).
+    :param exact_svd: If true, compute exact SVDs. If false, compute
+                      approximate SVDs (Bool).
 
     :return: This function returns two values. The first value is a tuple of two
              n-by-n arrays that correspond to the best feasible solution found
@@ -279,11 +309,6 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank;
                                         one_indices=one_indices,
                                         min_improvement=min_improvement,
                                         exact_svd=exact_svd)
-    if local_search_flag
-        best_sol, best_obj, _, _ = local_search(best_sol[1], best_sol[2], U, mu,
-                                                lambda, k_sparse, k_rank,
-                                                min_improvement=min_improvement)
-    end
 
     # Repeat the search process random_restarts times
     for i=1:random_restarts
@@ -298,11 +323,6 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank;
                                           one_indices=one_indices,
                                           min_improvement=min_improvement,
                                           exact_svd=exact_svd)
-        if local_search_flag
-            new_sol, new_obj, _, _ = local_search(new_sol[1], new_sol[2], U,
-                                            mu, lambda, k_sparse, k_rank,
-                                            min_improvement=min_improvement)
-        end
 
         # Store the newly found solution if it is better than the best found
         # solution to this point
@@ -319,13 +339,48 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank;
 
 end;
 
-function validate_heuristic_params(n, param_frac, sigma, signal_to_noise,
-                                   exact_svd; train_size=20,
-                                   candidate_lambdas=[10, 1, 0.1, 0.01],
-                                   candidate_mus=[10, 1, 0.1, 0.01],
-                                   fixed_rank_sparse=false,
-                                   fixed_rank=1,
-                                   fixed_sparse=0)
+function validate_AM_params(n, param_frac, sigma, signal_to_noise;
+                            exact_svd=true, train_size=20,
+                            candidate_lambdas=[10, 1, 0.1, 0.01],
+                            candidate_mus=[10, 1, 0.1, 0.01],
+                            fixed_rank_sparse=false,
+                            fixed_rank=1, fixed_sparse=0,
+                            symmetric_flag=false)
+    """
+    This function performs cross validation to select the regularization
+    parameters lambda and mu for the optimization problem given by
+        min ||U - X - Y||_F^2 + lambda * ||X||_F^2 + mu * ||Y||_F^2
+        subject to rank(X) <= k_rank, ||Y||_0 <= k_sparse
+
+    :param n: The row and column dimension of the data (Int64).
+    :param param_frac: Parameter that controls the rank and sparsity of the
+                       sampled low rank and sparse matrices when
+                       fixed_rank_sparse=false (Float64).
+    :param sigma: Parameter that controls the absolute magnitude of the noise
+                  (Float64).
+    :param signal_to_noise: Parameter that controls the signal to noise ratio of
+                            the sampled data (Float64).
+    :param exact_svd: If true, compute exact SVDs. If false, compute
+                      approximate SVDs (Bool).
+    :param train_size: The number of samples to draw per parameter when
+                       performing cross validation (Int64).
+    :param candidate_lambdas: List of values of lambda (Float64) to be
+                              considered during cross validation.
+    :param candidate_mus: List of values of mu (Float64) to be considered during
+                          cross validation.
+    :param fixed_rank_sparse: If true, use fixed_rank and fixed_sparse as the
+                              rank and sparsity respectively of the low rank
+                              matrix and the sparse matrix when sampling (Bool).
+    :param fixed_rank: Rank of the low rank matrices to be sampled when
+                       fixed_rank_sparse=true.
+    :param fixed_sparse: Sparsity of the sparse matrices to be sampled when
+                         fixed_rank_sparse=true
+    :param symmetric_flag: If true, sampling symmetric data (Bool).
+
+    :return: This function returns 2 values.
+             1) The best performing lambda value (Float64).
+             2) The best performing mu value (Float64).
+    """
 
     param_scores = Dict()
     for lambda_mult in candidate_lambdas, mu_mult in candidate_mus
@@ -336,15 +391,27 @@ function validate_heuristic_params(n, param_frac, sigma, signal_to_noise,
 
         for trial = 1:train_size
 
-            D, L_0, S_0, k_sparse, k_rank = generate_synthetic_data_final(n,
-                                                param_frac, sigma,
-                                                signal_to_noise=signal_to_noise,
-                                                fixed_rank_sparse=fixed_rank_sparse,
-                                                fixed_rank=fixed_rank,
-                                                fixed_sparse=fixed_sparse)
+            if symmetric_flag
 
-            sol, _ = iterative_search(D, this_mu, this_lambda, k_sparse,
-                                      k_rank, exact_svd=exact_svd)
+                D, L_0, S_0, k_sparse, k_rank = generate_synthetic_data_symmetric(n,
+                                                    param_frac, sigma,
+                                                    signal_to_noise=signal_to_noise,
+                                                    fixed_rank_sparse=fixed_rank_sparse,
+                                                    fixed_rank=fixed_rank,
+                                                    fixed_sparse=fixed_sparse)
+
+            else
+
+                D, L_0, S_0, k_sparse, k_rank = generate_synthetic_data(n,
+                                                    param_frac, sigma,
+                                                    signal_to_noise=signal_to_noise,
+                                                    fixed_rank_sparse=fixed_rank_sparse,
+                                                    fixed_rank=fixed_rank,
+                                                    fixed_sparse=fixed_sparse)
+            end
+
+            sol, _ = SLR_AM(D, this_mu, this_lambda, k_sparse, k_rank,
+                            exact_svd=exact_svd)
 
             D_error = norm(D - sol[1] - sol[2])^2 / norm(D)^2
             L_error = norm(L_0 - sol[1])^2 / norm(L_0)^2

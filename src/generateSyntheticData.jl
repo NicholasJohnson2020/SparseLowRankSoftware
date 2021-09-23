@@ -94,9 +94,9 @@ function generate_synthetic_data_symmetric(n, param_frac, sigma;
                          fixed_rank_sparse=true
 
     :return: This function returns 5 values:
-             1) The sampled n x n data matrix.
-             2) The sampled n x n low rank matrix.
-             3) The sampled n x n sparse matrix.
+             1) The sampled n-by-n data matrix.
+             2) The sampled n-by-n low rank matrix.
+             3) The sampled n-by-n sparse matrix.
              4) The sparsity level of the sparse matrix.
              5) The rank of the low rank matrix.
     """
