@@ -1,5 +1,5 @@
 # SparseLowRankSoftware
-Software supplement for the paper  "Sparse Plus Low Rank Matrix Decomposition: A Discrete Optimization Approach"  by Dimitris Bertsimas, Ryan Cory-Wright and Nicholas A. G. Johnson
+Software supplement for the paper  "Sparse Plus Low Rank Matrix Decomposition: A Discrete Optimization Approach"  by Dimitris Bertsimas, Ryan Cory-Wright and Nicholas A. G. Johnson for which a preprint is available [here](https://arxiv.org/pdf/2109.12701.pdf).
 
 ## Introduction
 
@@ -29,6 +29,21 @@ Several packages must be installed in Julia before the code can be run.  These p
 ## Use of the SLR_AM() and SLR_BnB() functions
 
 The two key methods in this package are SLR_AM() and SLR_BnB().  They both take five required  arguments: `U`, `\mu`, `\lambda`, `k_sparse` and `k_rank`, as well as several optional arguments which are described in the respective function docstring. The five required arguments correspond to the input data to the optimization problem.
+
+## Citing sparseLowRankSoftware.jl
+
+If you use sparseLowRankSoftware.jl, we ask that you please cite the following [paper](https://arxiv.org/pdf/2109.12701.pdf):
+```
+@misc{bertsimas2021sparse,
+      title={Sparse Plus Low Rank Matrix Decomposition: A Discrete Optimization Approach},
+      author={Dimitris Bertsimas and Ryan Cory-Wright and Nicholas A. G. Johnson},
+      year={2021},
+      eprint={2109.12701},
+      archivePrefix={arXiv},
+      primaryClass={stat.ML}
+}
+```
+
 
 ## Thank you
 
