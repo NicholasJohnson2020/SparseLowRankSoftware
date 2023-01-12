@@ -28,7 +28,7 @@ function solve_perspective_relaxation(U, mu, lambda, k_sparse, k_rank;
              matrix Theta). The second value is the optimal objective value of
              the relaxation (Float64).
     """
-    
+
     n = size(U)[1]
 
     num_zeros = size(zero_indices)[1]
@@ -50,8 +50,8 @@ function solve_perspective_relaxation(U, mu, lambda, k_sparse, k_rank;
     @variable(m, theta[i=1:n, j=1:n] >= 0)
 
     @constraint(m, [i=1:n, j=1:n], Z[i, j] <= 1)
-    @SDconstraint(m, [i=1:n, j=1:n],
-        [theta[i, j] Y[i, j]; Y[i, j] Z[i, j]] >= 0)
+    @constraint(m, [i=1:n, j=1:n],
+        [theta[i, j] Y[i, j]; Y[i, j] Z[i, j]] in PSDCone())
     for (i, j) in zero_indices
         @constraint(m, Z[i, j] == 0)
         @constraint(m, Y[i, j] == 0)

@@ -76,6 +76,7 @@ function project_matrix(A, k_rank; exact_svd=true)
 
         projected_matrix = pqrfact(A, rank=k_rank)
         projected_matrix = Matrix(projected_matrix)
+        S = nothing
 
     end
 

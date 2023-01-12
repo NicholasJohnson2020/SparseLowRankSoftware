@@ -97,7 +97,7 @@ function SLR_BnB(U, mu, lambda, k_sparse, k_rank; epsilon=0.1,
              objective value (Float64) achieved by the returned feasible
              solution.
     """
-    
+
     start_time = now()
 
     # Solve the root node
