@@ -4,3 +4,5 @@ using TSVD, Distributions, StatsBase
 include("src/BnB.jl")
 include("benchmarkMethods/SPCP.jl")
 include("benchmarkMethods/AltProj.jl")
+include("benchmarkMethods/fastRPCA.jl")
+include("benchmarkMethods/ScaledGD.jl")
