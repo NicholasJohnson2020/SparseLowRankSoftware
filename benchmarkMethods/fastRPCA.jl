@@ -1,10 +1,10 @@
-include("gradientMethodFunctions.jl")
+include("ScaledGD.jl")
 
 function f_RPCA_projection(A, radius)
 
-    n = size(A)[1]
+    n, m = size(A)
 
-    projected_matrix = zeros(n, n)
+    projected_matrix = zeros(n, m)
     for i=1:n
         row_norm = norm(A[i, :])
         if row_norm <= radius
@@ -18,7 +18,7 @@ function f_RPCA_projection(A, radius)
 end
 
 
-function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteraton=1000)
+function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
     """
     This function computes a feasible solution to Robust PCA by employing the
     fast RPCA algorithm as described in "Fast Algorithms for Robust PCA via
@@ -40,6 +40,8 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteraton=1000)
     n = size(A)[1]
     alpha = k_sparse / n^2
 
+    U, sigma, Vt = svd(A)
+
     # Compute "empirical" incoherence parameter
     incoherence_param = 0
     for i=1:n
@@ -55,8 +57,8 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteraton=1000)
     U_naught = L * Diagonal(sqrt.(S))
     V_naught = R * Diagonal(sqrt.(S))
 
-    U_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(U_naught, 1)[2]
-    V_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(V_naught, 1)[2]
+    U_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(U_naught, 1)[2][1]
+    V_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(V_naught, 1)[2][1]
 
     # Initilize the sparse matrix, U and V iterates
     Y_iterate = sparse_threshold(A, alpha)
@@ -70,14 +72,14 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteraton=1000)
         # Update the sparse matrix iterate
         Y_iterate = sparse_threshold(A - U_iterate * V_iterate', gamma * alpha)
 
-        gradients = RPCA_gradient(U_iterate, V_iterate, Y_iterate)
+        gradients = RPCA_gradient(U_iterate, V_iterate, Y_iterate, A)
         residual = U_iterate' * U_iterate - V_iterate' * V_iterate
         U_update = U_iterate - eta * (gradients[1] + U_iterate * residual / 2)
         V_update = V_iterate - eta * (gradients[2] - V_iterate * residual / 2)
 
         # Update the U and V iterates
-        U_iterate = U_update
-        V_iterate = V_update
+        U_iterate = f_RPCA_projection(U_update, U_radius)
+        V_iterate = f_RPCA_projection(V_update, V_radius)
     end
 
     return (U_iterate * V_iterate', Y_iterate)
