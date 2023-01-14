@@ -11,7 +11,7 @@ function sparse_threshold(A, alpha)
     """
 
     n = size(A)[1]
-    index = Int(floor(alpha * n))
+    index = maximum([Int(floor(alpha * n)), 1])
     row_maximums = zeros(n)
     col_maximums = zeros(n)
 
