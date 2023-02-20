@@ -1,69 +1,28 @@
-function sparse_threshold(A, alpha)
-    """
-    This function perfoms thresholding of the matrix A as described in
-    "Accelerating Ill-Conditioned Low-Rank Matrix Estimation via Scaled
-    Gradient Descent" (Tong et al. 2021) with respect to the float alpha.
+include("ScaledGD.jl")
 
-    :param A: An arbitrary n-by-n matrix.
-    :param alpha: The desired thresholding value (Float64).
+function f_RPCA_projection(A, radius)
 
-    :return: The n-by-n thresholding matrix of A.
-    """
+    n, m = size(A)
 
-    n = size(A)[1]
-    index = maximum([Int(floor(alpha * n)), 1])
-    index = minimum([index, n])
-    row_maximums = zeros(n)
-    col_maximums = zeros(n)
-
-    # Identify the index^{th} largest element in each row and column
+    projected_matrix = zeros(n, m)
     for i=1:n
-        row_maximums[i] = sort(vec(broadcast(abs, A[i, :])), rev=true)[index]
-        col_maximums[i] = sort(vec(broadcast(abs, A[:, i])), rev=true)[index]
+        row_norm = norm(A[i, :])
+        if row_norm <= radius
+            projected_matrix[i, :] = A[i, :]
+        else
+            projected_matrix[i, :] = A[i, :] / row_norm * radius
+        end
     end
 
-    # Execute the thresholding
-    row_filter = zeros(Bool, (n, n))
-    col_filter = zeros(Bool, (n, n))
-    for i=1:n
-        row_filter[i, :] = abs.(A[i, :]) .>= row_maximums[i]
-        col_filter[:, i] = abs.(A[:, i]) .>= col_maximums[i]
-    end
-    filter = row_filter .& col_filter
-
-    return A .* filter
-
+    return projected_matrix
 end
 
-function RPCA_gradient(U, V, S, A)
-    """
-    This function evaluates the partial gradients of the RPCA objective
-    function when the low-rank matrix is factorized as X = U * V^T.
 
-    :param U: An n-by-n matrix corresponding to the U factor of X.
-    :param V: An n-by-n matrix corresponding to the V factor of X.
-    :param S: An n-by-n matrix corresponding to the sparse matrix.
-    :param A: An arbitrary n-by-n matrix (the input data matrix to RPCA).
-
-    :return: A 1-dimensional vector of length 2. The first component of the
-             vector is the partial with respect to U. The second component is
-             the partial with respect to V.
-    """
-
-    X_iterate = U * V'
-    U_grad = (S + X_iterate - A) * V
-    V_grad = (S' + X_iterate' - A') * U
-
-    return (U_grad, V_grad)
-
-end
-;
-
-function scaled_GD(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
+function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
     """
     This function computes a feasible solution to Robust PCA by employing the
-    ScaledGD algorithm as described in "Accelerating Ill-Conditioned Low-Rank
-    Matrix Estimation via Scaled Gradient Descent" (Tong et al. 2021).
+    fast RPCA algorithm as described in "Fast Algorithms for Robust PCA via
+    Gradient Descent" (Yi et al. 2016).
 
     :param A: An arbitrary n-by-n matrix.
     :param k_sparse: The maximum sparsity of the sparse matrix (Int64).
@@ -81,15 +40,32 @@ function scaled_GD(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
     n = size(A)[1]
     alpha = k_sparse / n^2
 
-    Y_iterate = sparse_threshold(A, gamma * alpha)
+    U, sigma, Vt = svd(A)
+
+    # Compute "empirical" incoherence parameter
+    incoherence_param = 0
+    for i=1:n
+
+        incoherence_param = maximum([norm(U[i, :]) * sqrt(n / k_rank),
+                                     norm(Vt[:, i]) * sqrt(n / k_rank),
+                                     incoherence_param])
+
+    end
 
     L, S, R = tsvd(A, k_rank)
 
-    U_iterate = L * Diagonal(sqrt.(S))
-    V_iterate = R * Diagonal(sqrt.(S))
+    U_naught = L * Diagonal(sqrt.(S))
+    V_naught = R * Diagonal(sqrt.(S))
 
-    # Default step size specified in the paper
-    eta = 2 / 3
+    U_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(U_naught, 1)[2][1]
+    V_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(V_naught, 1)[2][1]
+
+    # Initilize the sparse matrix, U and V iterates
+    Y_iterate = sparse_threshold(A, alpha)
+    U_iterate = f_RPCA_projection(U_naught, U_radius)
+    V_iterate = f_RPCA_projection(V_naught, V_radius)
+
+    eta = 1 / tsvd(U_naught * V_naught')[2][1]
 
     # Main loop
     for iteration=1:max_iteration
@@ -97,21 +73,22 @@ function scaled_GD(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
         Y_iterate = sparse_threshold(A - U_iterate * V_iterate', gamma * alpha)
 
         gradients = RPCA_gradient(U_iterate, V_iterate, Y_iterate, A)
-        U_update = U_iterate - eta * gradients[1] * pinv(V_iterate' * V_iterate)
-        V_update = V_iterate - eta * gradients[2] * pinv(U_iterate' * U_iterate)
+        residual = U_iterate' * U_iterate - V_iterate' * V_iterate
+        U_update = U_iterate - eta * (gradients[1] + U_iterate * residual / 2)
+        V_update = V_iterate - eta * (gradients[2] - V_iterate * residual / 2)
 
         # Update the U and V iterates
-        U_iterate = U_update
-        V_iterate = V_update
+        U_iterate = f_RPCA_projection(U_update, U_radius)
+        V_iterate = f_RPCA_projection(V_update, V_radius)
     end
 
     return (U_iterate * V_iterate', Y_iterate)
-end;
+end
 
-function cross_validate_ScaledGD(U, k_sparse, k_rank;
-                                 num_samples=30, train_frac=0.7,
-                                 candidate_gammas=[10, 8, 6, 4, 2, 1,
-                                                   0.5, 0.1, 0.05, 0.01])
+function cross_validate_fRPCA(U, k_sparse, k_rank;
+                              num_samples=30, train_frac=0.7,
+                              candidate_gammas=[10, 8, 6, 4, 2, 1,
+                                                0.5, 0.1, 0.05, 0.01])
     """
     This function performs cross validation to select the regularization
     parameters lambda and mu for the optimization problem given by
@@ -156,7 +133,7 @@ function cross_validate_ScaledGD(U, k_sparse, k_rank;
 
         for gamma in candidate_gammas
 
-            sol = scaled_GD(train_data, k_rank, k_sparse, gamma=gamma)
+            sol = fast_RPCA(train_data, k_rank, k_sparse, gamma=gamma)
 
             val_estimate = LL_block_data * pinv(sol[1]) * UR_block_data
             val_error = norm(val_estimate - val_data)^2/norm(val_data)^2
@@ -177,4 +154,5 @@ function cross_validate_ScaledGD(U, k_sparse, k_rank;
 
     return best_param, param_scores
 
-end;
+end
+;

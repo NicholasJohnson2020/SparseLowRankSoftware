@@ -336,6 +336,88 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank; zero_indices=[],
 
 end;
 
+function cross_validate_AM(U, k_sparse, k_rank;
+                           num_samples=30, train_frac=0.7,
+                           candidate_lambdas=[10, 1, 0.1, 0.01],
+                           candidate_mus=[10, 1, 0.1, 0.01],
+                           exact_svd=true)
+    """
+    This function performs cross validation to select the regularization
+    parameters lambda and mu for the optimization problem given by
+        min ||U - X - Y||_F^2 + lambda * ||X||_F^2 + mu * ||Y||_F^2
+        subject to rank(X) <= k_rank, ||Y||_0 <= k_sparse
+
+    :param U: An arbitrary n-by-n matrix.
+    :param k_sparse: The maximum sparsity of the sparse matrix (Int64).
+    :param k_rank: The maximum rank of the low rank matrix (Int64).
+    :param num_samples: The number of samples to draw when
+                        performing cross validation (Int64).
+    :param train_frac: The fraction of the data to be used as training data when
+                       performing cross validation.
+    :param candidate_lambdas: List of values of lambda (Float64) to be
+                              considered during cross validation.
+    :param candidate_mus: List of values of mu (Float64) to be considered during
+                          cross validation.
+    :param exact_svd: If true, compute exact SVDs. If false, compute
+                      approximate SVDs (Bool).
+
+    :return: This function returns 3 values.
+             1) The best performing lambda value (Float64).
+             2) The best performing mu value (Float64).
+             3) A dictionary of cross validation scores of all parameters.
+    """
+
+    n = size(U)[1]
+    val_dim = Int(floor(n * (1-sqrt(train_frac))))
+    train_dim = n - val_dim
+
+    param_scores = Dict()
+    for lambda_mult in candidate_lambdas, mu_mult in candidate_mus
+        param_scores[(lambda_mult, mu_mult)] = 0
+    end
+
+    for trial=1:num_samples
+
+        permutation = randperm(n)
+        val_indices = permutation[1:val_dim]
+        train_indices = permutation[(val_dim+1):end]
+
+        val_data = U[val_indices, val_indices]
+        train_data = U[train_indices, train_indices]
+
+        LL_block_data = U[val_indices, train_indices]
+        UR_block_data = U[train_indices, val_indices]
+
+        for lambda_mult in candidate_lambdas, mu_mult in candidate_mus
+
+            this_lambda = lambda_mult / n^0.5
+            this_mu = mu_mult / n^0.5
+
+            sol, _ = SLR_AM(train_data, this_mu, this_lambda, k_sparse, k_rank,
+                            exact_svd=exact_svd)
+
+            val_estimate = LL_block_data * pinv(sol[1]) * UR_block_data
+            val_error = norm(val_estimate - val_data)^2/norm(val_data)^2
+
+            param_scores[(lambda_mult, mu_mult)] += val_error / num_samples
+
+        end
+    end
+
+    best_score = 1e9
+    best_params = ()
+    for (param, score) in param_scores
+        if score < best_score
+            best_score = score
+            best_params = param
+        end
+    end
+
+    return best_params[1], best_params[2], param_scores
+
+end;
+
+
 function validate_AM_params(n, param_frac, sigma; signal_to_noise=10,
                             exact_svd=true, train_size=20,
                             candidate_lambdas=[10, 1, 0.1, 0.01],
