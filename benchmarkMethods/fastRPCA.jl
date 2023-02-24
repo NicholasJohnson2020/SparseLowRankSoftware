@@ -118,6 +118,7 @@ function cross_validate_fRPCA(U, k_sparse, k_rank;
     for gamma in candidate_gammas
         param_scores[gamma] = 0
     end
+    bad_keys = []
 
     for trial=1:num_samples
 
@@ -135,7 +136,18 @@ function cross_validate_fRPCA(U, k_sparse, k_rank;
 
             sol = fast_RPCA(train_data, k_rank, k_sparse, gamma=gamma)
 
-            val_estimate = LL_block_data * pinv(sol[1]) * UR_block_data
+            psuedo_inv = nothing
+            try
+                psuedo_inv = pinv(sol[1])
+            catch
+              println("pinv threw an error.")
+            end
+
+            if psuedo_inv == nothing
+                append!(bad_keys, gamma)
+            end
+
+            val_estimate = LL_block_data * pseudo_inv * UR_block_data
             val_error = norm(val_estimate - val_data)^2/norm(val_data)^2
 
             param_scores[gamma] += val_error / num_samples
@@ -146,6 +158,9 @@ function cross_validate_fRPCA(U, k_sparse, k_rank;
     best_score = 1e9
     best_param = nothing
     for (param, score) in param_scores
+        if param in bad_keys
+            continue
+        end
         if score < best_score
             best_score = score
             best_param = param
