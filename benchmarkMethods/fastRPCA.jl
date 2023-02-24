@@ -139,14 +139,14 @@ function cross_validate_fRPCA(U, k_sparse, k_rank;
 
             sol = fast_RPCA(train_data, k_rank, k_sparse, gamma=gamma)
 
-            psuedo_inv = nothing
+            pseudo_inv = nothing
             try
-                psuedo_inv = pinv(sol[1])
+                pseudo_inv = pinv(sol[1])
             catch
               println("pinv threw an error.")
             end
 
-            if psuedo_inv == nothing
+            if pseudo_inv == nothing
                 append!(bad_keys, gamma)
             end
 
