@@ -57,8 +57,11 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
     U_naught = L * Diagonal(sqrt.(S))
     V_naught = R * Diagonal(sqrt.(S))
 
-    U_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(U_naught, 1)[2][1]
-    V_radius = sqrt(2 * incoherence_param * k_rank / n) * tsvd(V_naught, 1)[2][1]
+    _, U_s, _ = svd(U_naught)
+    _, V_s, _ = svd(V_naught)
+
+    U_radius = sqrt(2 * incoherence_param * k_rank / n) * U_s[1]
+    V_radius = sqrt(2 * incoherence_param * k_rank / n) * V_s[1]
 
     # Initilize the sparse matrix, U and V iterates
     Y_iterate = sparse_threshold(A, alpha)
