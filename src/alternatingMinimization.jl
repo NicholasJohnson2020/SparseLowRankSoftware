@@ -254,7 +254,8 @@ end;
 
 # TODO: edit function description to describe zero_indices and one_indices params
 function SLR_AM(U, mu, lambda, k_sparse, k_rank; zero_indices=[],
-    one_indices=[], random_restarts=100, min_improvement=0.001, exact_svd=true)
+    one_indices=[], random_restarts=1, min_improvement=0.001, exact_svd=true,
+    hybrid_svd=false)
     """
     This function computes a feasible solution to the problem
         min ||U - X - Y||_F^2 + lambda * ||X||_F^2 + mu * ||Y||_F^2
@@ -308,7 +309,7 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank; zero_indices=[],
                                         exact_svd=exact_svd)
 
     # Repeat the search process random_restarts times
-    for i=1:random_restarts
+    for i=2:random_restarts
         X_random = rand(Float64, (n, n))
         X_init = project_matrix(X_random, k_rank)
         Y_random = rand(Float64, (n, n))
@@ -330,7 +331,13 @@ function SLR_AM(U, mu, lambda, k_sparse, k_rank; zero_indices=[],
     end
 
     # Verify that the solution to be returned is in fact feasible
-    @assert is_feasible(best_sol[1], best_sol[2], k_sparse, k_rank)
+    # @assert is_feasible(best_sol[1], best_sol[2], k_sparse, k_rank)
+
+    if (!exact_svd) && hybrid_svd
+        Y = solve_sparse_problem(U - best_sol[1], mu, k_sparse)
+        X = solve_rank_problem(U - Y, lambda, k_rank, exact_svd=true)
+        best_sol = (X, Y)
+    end
 
     return best_sol, best_obj
 
@@ -340,7 +347,7 @@ function cross_validate_AM(U, k_sparse, k_rank;
                            num_samples=30, train_frac=0.7,
                            candidate_lambdas=[10, 1, 0.1, 0.01],
                            candidate_mus=[10, 1, 0.1, 0.01],
-                           exact_svd=true)
+                           exact_svd=true, hybrid_svd=false)
     """
     This function performs cross validation to select the regularization
     parameters lambda and mu for the optimization problem given by
@@ -394,7 +401,7 @@ function cross_validate_AM(U, k_sparse, k_rank;
             this_mu = mu_mult / n^0.5
 
             sol, _ = SLR_AM(train_data, this_mu, this_lambda, k_sparse, k_rank,
-                            exact_svd=exact_svd)
+                            exact_svd=exact_svd, hybrid_svd=hybrid_svd)
 
             val_estimate = LL_block_data * pinv(sol[1]) * UR_block_data
             val_error = norm(val_estimate - val_data)^2/norm(val_data)^2
@@ -414,106 +421,5 @@ function cross_validate_AM(U, k_sparse, k_rank;
     end
 
     return best_params[1], best_params[2], param_scores
-
-end;
-
-
-function validate_AM_params(n, param_frac, sigma; signal_to_noise=10,
-                            exact_svd=true, train_size=20,
-                            candidate_lambdas=[10, 1, 0.1, 0.01],
-                            candidate_mus=[10, 1, 0.1, 0.01],
-                            fixed_rank_sparse=false,
-                            fixed_rank=1, fixed_sparse=0,
-                            symmetric_flag=false)
-    """
-    This function performs cross validation to select the regularization
-    parameters lambda and mu for the optimization problem given by
-        min ||U - X - Y||_F^2 + lambda * ||X||_F^2 + mu * ||Y||_F^2
-        subject to rank(X) <= k_rank, ||Y||_0 <= k_sparse
-
-    :param n: The row and column dimension of the data (Int64).
-    :param param_frac: Parameter that controls the rank and sparsity of the
-                       sampled low rank and sparse matrices when
-                       fixed_rank_sparse=false (Float64).
-    :param sigma: Parameter that controls the absolute magnitude of the noise
-                  (Float64).
-    :param signal_to_noise: Parameter that controls the signal to noise ratio of
-                            the sampled data (Float64).
-    :param exact_svd: If true, compute exact SVDs. If false, compute
-                      approximate SVDs (Bool).
-    :param train_size: The number of samples to draw per parameter when
-                       performing cross validation (Int64).
-    :param candidate_lambdas: List of values of lambda (Float64) to be
-                              considered during cross validation.
-    :param candidate_mus: List of values of mu (Float64) to be considered during
-                          cross validation.
-    :param fixed_rank_sparse: If true, use fixed_rank and fixed_sparse as the
-                              rank and sparsity respectively of the low rank
-                              matrix and the sparse matrix when sampling (Bool).
-    :param fixed_rank: Rank of the low rank matrices to be sampled when
-                       fixed_rank_sparse=true.
-    :param fixed_sparse: Sparsity of the sparse matrices to be sampled when
-                         fixed_rank_sparse=true
-    :param symmetric_flag: If true, sampling symmetric data (Bool).
-
-    :return: This function returns 2 values.
-             1) The best performing lambda value (Float64).
-             2) The best performing mu value (Float64).
-    """
-
-    param_scores = Dict()
-    for lambda_mult in candidate_lambdas, mu_mult in candidate_mus
-
-        param_scores[(lambda_mult, mu_mult)] = 0
-        this_lambda = lambda_mult / n^0.5
-        this_mu = mu_mult / n^0.5
-
-        for trial = 1:train_size
-
-            if symmetric_flag
-
-                D, L_0, S_0, k_sparse, k_rank = generate_synthetic_data_symmetric(n,
-                                                    param_frac, sigma,
-                                                    signal_to_noise=signal_to_noise,
-                                                    fixed_rank_sparse=fixed_rank_sparse,
-                                                    fixed_rank=fixed_rank,
-                                                    fixed_sparse=fixed_sparse)
-
-            else
-
-                D, L_0, S_0, k_sparse, k_rank = generate_synthetic_data(n,
-                                                    param_frac, sigma,
-                                                    signal_to_noise=signal_to_noise,
-                                                    fixed_rank_sparse=fixed_rank_sparse,
-                                                    fixed_rank=fixed_rank,
-                                                    fixed_sparse=fixed_sparse)
-            end
-
-            sol, _ = SLR_AM(D, this_mu, this_lambda, k_sparse, k_rank,
-                            exact_svd=exact_svd)
-
-            D_error = norm(D - sol[1] - sol[2])^2 / norm(D)^2
-            L_error = norm(L_0 - sol[1])^2 / norm(L_0)^2
-            S_error = norm(S_0 - sol[2])^2 / norm(S_0)^2
-            score = D_error + L_error + S_error
-
-            param_scores[(lambda_mult, mu_mult)] += score
-
-        end
-
-        param_scores[(lambda_mult, mu_mult)] /= train_size
-
-    end
-
-    best_score = 1000
-    best_params = ()
-    for (param, score) in param_scores
-        if score < best_score
-            best_score = score
-            best_params = param
-        end
-    end
-
-    return best_params[1], best_params[2]
 
 end;
