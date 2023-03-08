@@ -18,7 +18,9 @@ function f_RPCA_projection(A, radius)
 end
 
 
-function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
+function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000,
+                   termination_criteria="rel_improvement",
+                   min_improvement=0.001)
     """
     This function computes a feasible solution to Robust PCA by employing the
     fast RPCA algorithm as described in "Fast Algorithms for Robust PCA via
@@ -31,12 +33,27 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
                   function (Float64).
     :param max_iteration: The number of iterations of the main optimization
                           loop to execute (Int64).
+    :param termination_criteria: String that must take value either
+                                 "rel_improvement" or "iteration_count". If
+                                 "rel_improvement", the algorithm will terminate
+                                 if the fractional decrease in the objective
+                                 value after an iteration is less than
+                                 min_improvement. If set to "iteration_count"
+                                 the algorithm will terminate after
+                                 max_iteration steps (String).
+    :param min_improvement: The minimal fractional decrease in the objective
+                            value required for the procedure to continue
+                            iterating when termination_criteria is set to
+                            "rel_improvement".
 
     :return: This funciton returns a tuple of two n-by-n arrays that correspond
              to the feasible solution found by this method (the first element
              in the tuple is the matrix X and the second element is the
              matrix Y).
     """
+
+    @assert termination_criteria in ["iteration_count", "rel_improvement"]
+
     n = size(A)[1]
     alpha = k_sparse / n^2
 
@@ -68,6 +85,13 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
     U_iterate = f_RPCA_projection(U_naught, U_radius)
     V_iterate = f_RPCA_projection(V_naught, V_radius)
 
+    old_objective = 0
+    new_objective = 0
+    if termination_criteria == "rel_improvement"
+        new_objective = compute_objective_value(U_iterate * V_iterate',
+                                                Y_iterate, A, 0, 0)
+    end
+
     eta = 1 / tsvd(U_naught * V_naught')[2][1]
 
     # Main loop
@@ -83,6 +107,16 @@ function fast_RPCA(A, k_rank, k_sparse; gamma=2, max_iteration=1000)
         # Update the U and V iterates
         U_iterate = f_RPCA_projection(U_update, U_radius)
         V_iterate = f_RPCA_projection(V_update, V_radius)
+
+        if termination_criteria == "rel_improvement"
+            old_objective = new_objective
+            new_objective = compute_objective_value(U_iterate * V_iterate',
+                                                    Y_iterate, A, 0, 0)
+            if (old_objective - new_objective) / old_objective < min_improvement
+                break
+            end
+        end
+
     end
 
     return (U_iterate * V_iterate', Y_iterate)
@@ -91,7 +125,10 @@ end
 function cross_validate_fRPCA(U, k_sparse, k_rank;
                               num_samples=30, train_frac=0.7,
                               candidate_gammas=[10, 8, 6, 4, 2, 1,
-                                                0.5, 0.1, 0.05, 0.01])
+                                                0.5, 0.1, 0.05, 0.01],
+                              termination_criteria="rel_improvement",
+                              max_iteration=1000,
+                              min_improvement=0.001)
     """
     This function performs cross validation to select the regularization
     parameters lambda and mu for the optimization problem given by
@@ -107,11 +144,27 @@ function cross_validate_fRPCA(U, k_sparse, k_rank;
                        performing cross validation.
     :param candidate_gammas: List of values of gamma (Float64) to be
                               considered during cross validation.
+    :param max_iteration: The number of iterations of the main optimization
+                          loop to execute (Int64).
+    :param termination_criteria: String that must take value either
+                                 "rel_improvement" or "iteration_count". If
+                                 "rel_improvement", the algorithm will terminate
+                                 if the fractional decrease in the objective
+                                 value after an iteration is less than
+                                 min_improvement. If set to "iteration_count"
+                                 the algorithm will terminate after
+                                 max_iteration steps (String).
+    :param min_improvement: The minimal fractional decrease in the objective
+                            value required for the procedure to continue
+                            iterating when termination_criteria is set to
+                            "rel_improvement".
 
     :return: This function returns 2 values.
              1) The best performing gamma value (Float64).
              2) A dictionary of cross validation scores of all parameters.
     """
+
+    @assert termination_criteria in ["iteration_count", "rel_improvement"]
 
     n = size(U)[1]
     val_dim = Int(floor(n * (1-sqrt(train_frac))))
@@ -137,7 +190,10 @@ function cross_validate_fRPCA(U, k_sparse, k_rank;
 
         for gamma in candidate_gammas
 
-            sol = fast_RPCA(train_data, k_rank, k_sparse, gamma=gamma)
+            sol = fast_RPCA(train_data, k_rank, k_sparse, gamma=gamma,
+                            termination_criteria=termination_criteria,
+                            max_iteration=max_iteration,
+                            min_improvement=min_improvement)
 
             pseudo_inv = nothing
             try
