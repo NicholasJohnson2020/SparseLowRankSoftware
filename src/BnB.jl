@@ -90,12 +90,6 @@ function SLR_BnB(U, mu, lambda, k_sparse, k_rank; epsilon=0.1,
                 (milliseconds).
              8) The number of terminal nodes explored during the optimization
                 process (Int64).
-
-                best feasible solution found
-             by this method (the first element in the tuple is the matrix X and
-             the second element is the matrix Y). The second value is the
-             objective value (Float64) achieved by the returned feasible
-             solution.
     """
 
     start_time = now()
