@@ -34,13 +34,15 @@ The two key methods in this package are SLR_AM() and SLR_BnB().  They both take 
 
 If you use sparseLowRankSoftware.jl, we ask that you please cite the following [paper](https://arxiv.org/pdf/2109.12701.pdf):
 ```
-@misc{bertsimas2021sparse,
-      title={Sparse Plus Low Rank Matrix Decomposition: A Discrete Optimization Approach},
-      author={Dimitris Bertsimas and Ryan Cory-Wright and Nicholas A. G. Johnson},
-      year={2021},
-      eprint={2109.12701},
-      archivePrefix={arXiv},
-      primaryClass={stat.ML}
+@article{bertsimas2023sparse,
+  title={Sparse plus low rank matrix decomposition: A discrete optimization approach},
+  author={Bertsimas, Dimitris and Cory-Wright, Ryan and Johnson, Nicholas AG},
+  journal={The Journal of Machine Learning Research},
+  volume={24},
+  number={1},
+  pages={12478--12528},
+  year={2023},
+  publisher={JMLRORG}
 }
 ```
 
