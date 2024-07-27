@@ -32,7 +32,7 @@ The two key methods in this package are SLR_AM() and SLR_BnB().  They both take 
 
 ## Citing sparseLowRankSoftware.jl
 
-If you use sparseLowRankSoftware.jl, we ask that you please cite the following [paper](https://arxiv.org/pdf/2109.12701.pdf):
+If you use sparseLowRankSoftware.jl, we ask that you please cite the following [paper](https://www.jmlr.org/papers/volume24/21-1130/21-1130.pdf):
 ```
 @article{bertsimas2023sparse,
   title={Sparse plus low rank matrix decomposition: A discrete optimization approach},
