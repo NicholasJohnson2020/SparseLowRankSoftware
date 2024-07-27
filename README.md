@@ -1,5 +1,5 @@
 # SparseLowRankSoftware
-Software supplement for the paper  "Sparse Plus Low Rank Matrix Decomposition: A Discrete Optimization Approach"  by Dimitris Bertsimas, Ryan Cory-Wright and Nicholas A. G. Johnson for which a preprint is available [here](https://arxiv.org/pdf/2109.12701.pdf).
+Software supplement for the paper  "Sparse Plus Low Rank Matrix Decomposition: A Discrete Optimization Approach"  by Dimitris Bertsimas, Ryan Cory-Wright and Nicholas A. G. Johnson available [here](https://www.jmlr.org/papers/v24/21-1130.html).
 
 ## Introduction
 
